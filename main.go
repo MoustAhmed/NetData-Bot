@@ -6,8 +6,8 @@ import (
 	"image/color"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
-	"sort"
 	"strings"
 	"syscall"
 
@@ -172,6 +172,27 @@ func getGlobalMetrics() (CoinMarketCapGlobalMetricsResponse, error) {
 	return result, err
 }
 
+func generateChart(symbol string) error {
+	var cmd *exec.Cmd
+	pythonPath := "python" // Adjust to the path of Python if needed
+
+	if symbol == "" {
+		cmd = exec.Command(pythonPath, "generateChart.py")
+	} else {
+		cmd = exec.Command(pythonPath, "generateChart.py", symbol)
+	}
+
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Run()
+	if err != nil {
+		fmt.Println("Error generating chart:", err)
+		return err
+	}
+	return nil
+}
+
 // Function to fetch top 5 cryptocurrencies from CoinMarketCap API
 func getTop5Cryptos() (CoinMarketCapResponse, error) {
 	var result CoinMarketCapResponse
@@ -305,84 +326,54 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		s.ChannelMessageSend(m.ChannelID, message)
 	}
 
-	// Respond to "!chart" command for BTC dominance and Fear and Greed Index
+	// Respond to "!chart" command to show a list of available cryptocurrencies
 	if m.Content == "!chart" {
-		historicalFGIndex, err := getHistoricalFearGreedIndex()
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "Error fetching historical Fear and Greed Index data.")
-			return
-		}
+		cryptoList := "**Available Cryptocurrencies for Charting:**\n"
+		cryptoList += "- Bitcoin (`bitcoin`)\n"
+		cryptoList += "- Ethereum (`ethereum`)\n"
+		cryptoList += "- Polkadot (`polkadot`)\n"
+		cryptoList += "- Ripple (`ripple`)\n"
+		cryptoList += "- Cardano (`cardano`)\n"
+		cryptoList += "- Dogecoin (`dogecoin`)\n"
+		cryptoList += "- Solana (`solana`)\n"
+		cryptoList += "- Chainlink (`chainlink`)\n"
+		cryptoList += "- Binance Coin (`binancecoin`)\n"
+		cryptoList += "- Litecoin (`litecoin`)\n"
+		cryptoList += "\nUse `!chart [crypto name]` to view a chart for a specific cryptocurrency."
 
-		btcDominance, dates, err := getHistoricalBTCDominance()
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "Error fetching historical BTC dominance data.")
-			return
-		}
-
-		// Combine data for a single chart
-		fgValues := []float64{}
-		fgDates := []string{}
-
-		for _, data := range historicalFGIndex.Data {
-			value := 0
-			fmt.Sscanf(data.Value, "%d", &value)
-			fgValues = append(fgValues, float64(value))
-			fgDates = append(fgDates, data.Timestamp)
-		}
-
-		sort.Slice(fgDates, func(i, j int) bool {
-			return fgDates[i] < fgDates[j]
-		})
-
-		filename := "btc_dominance_fear_greed_chart.png"
-		err = createLineChart(filename, "BTC Dominance & Fear and Greed Index (6 months)", dates, btcDominance)
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "Error generating chart.")
-			return
-		}
-
-		file, err := os.Open(filename) // Open the file
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "Error opening chart file.")
-			return
-		}
-		defer file.Close()
-
-		s.ChannelFileSend(m.ChannelID, filename, file) // Send the file using the file reader
+		s.ChannelMessageSend(m.ChannelID, cryptoList)
 	}
 
-	// Respond to "!chart [coin symbol]" command for specific coin historical data
+	// Respond to "!chart [crypto symbol]" command
 	if strings.HasPrefix(m.Content, "!chart ") {
-		coinSymbol := strings.ToUpper(strings.TrimPrefix(m.Content, "!chart "))
-		prices, dates, err := getHistoricalCoinData(coinSymbol)
+		symbol := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(m.Content, "!chart ")))
+		err := generateChart(symbol)
 		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error fetching historical data for %s.", coinSymbol))
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error generating chart for %s.", symbol))
 			return
 		}
 
-		filename := fmt.Sprintf("%s_price_chart.png", coinSymbol)
-		err = createLineChart(filename, fmt.Sprintf("%s Price Over Last 6 Months", coinSymbol), dates, prices)
+		filename := fmt.Sprintf("%s_price_chart.png", symbol)
+		file, err := os.Open(filename)
 		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "Error generating chart.")
-			return
-		}
-
-		file, err := os.Open(filename) // Open the file
-		if err != nil {
-			s.ChannelMessageSend(m.ChannelID, "Error opening chart file.")
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error opening chart file for %s.", symbol))
 			return
 		}
 		defer file.Close()
 
-		s.ChannelFileSend(m.ChannelID, filename, file) // Send the file using the file reader
+		_, err = s.ChannelFileSend(m.ChannelID, filename, file)
+		if err != nil {
+			s.ChannelMessageSend(m.ChannelID, fmt.Sprintf("Error sending chart file for %s.", symbol))
+			return
+		}
 	}
 
 	// Respond to "!Help" command
 	if m.Content == "!Help" {
 		helpMessage := "**ℹ️ Available Commands:**\n"
 		helpMessage += "`!Market` - Display Fear and Greed Index, BTC dominance, top 5 cryptocurrencies, and investment advice.\n"
-		helpMessage += "`!chart` - Display a chart of BTC dominance and Fear and Greed Index over the last 6 months.\n"
-		helpMessage += "`!chart [coin symbol]` - Display a chart for the specified coin symbol over the last 6 months.\n"
+		helpMessage += "`!chart` - Display a list of available cryptocurrencies for charting.\n"
+		helpMessage += "`!chart [crypto name]` - Display a chart for the specified cryptocurrency over the last 6 months.\n"
 		helpMessage += "`!Help` - Display this help message."
 		s.ChannelMessageSend(m.ChannelID, helpMessage)
 	}
