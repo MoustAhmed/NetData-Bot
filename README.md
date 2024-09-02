@@ -52,5 +52,5 @@ A Discord bot that provides real-time market sentiment analysis using the Fear a
 
     ```bash
     go run main.go
-    Commands: !Market, !Help, !chart
+    Commands: !Market, !Help, !chart, !chart [crypto name]
     ```
