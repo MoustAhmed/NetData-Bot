@@ -328,7 +328,7 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 
 	// Respond to "!chart" command to show a list of available cryptocurrencies
 	if m.Content == "!chart" {
-		cryptoList := "**Available Cryptocurrencies for Charting:**\n"
+		cryptoList := "**Coin examples you can chart:**\n"
 		cryptoList += "- Bitcoin (`bitcoin`)\n"
 		cryptoList += "- Ethereum (`ethereum`)\n"
 		cryptoList += "- Polkadot (`polkadot`)\n"
@@ -339,7 +339,8 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		cryptoList += "- Chainlink (`chainlink`)\n"
 		cryptoList += "- Binance Coin (`binancecoin`)\n"
 		cryptoList += "- Litecoin (`litecoin`)\n"
-		cryptoList += "\nUse `!chart [crypto name]` to view a chart for a specific cryptocurrency."
+		cryptoList += "- etc...\n"
+		cryptoList += "\nUse `!chart crypto-name` to view a chart for a specific cryptocurrency."
 
 		s.ChannelMessageSend(m.ChannelID, cryptoList)
 	}
@@ -377,6 +378,58 @@ func messageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
 		helpMessage += "`!Help` - Display this help message."
 		s.ChannelMessageSend(m.ChannelID, helpMessage)
 	}
+
+	// Respond to "!clear" command
+	if m.Content == "!clear" {
+		// Fetch the channel information
+		channel, err := s.State.Channel(m.ChannelID)
+		if err != nil {
+			s.ChannelMessageSend(m.ChannelID, "Error fetching channel information.")
+			return
+		}
+
+		// Debugging: Print channel and category names
+		fmt.Printf("Channel Name: %s, Channel ID: %s\n", channel.Name, channel.ID)
+		if channel.ParentID != "" {
+			category, err := s.State.Channel(channel.ParentID)
+			if err == nil {
+				fmt.Printf("Category Name: %s, Category ID: %s\n", category.Name, category.ID)
+			} else {
+				fmt.Println("Error fetching category information:", err)
+			}
+		}
+
+		// Check if the command is in the bot-testing channel under the money category
+		if channel.Name == "bot-testing" && channel.ParentID != "" {
+			category, err := s.State.Channel(channel.ParentID)
+			if err == nil && category.Name == "Money" {
+				// Perform the clear operation
+				messages, err := s.ChannelMessages(m.ChannelID, 100, "", "", "")
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "Error fetching messages.")
+					return
+				}
+
+				var messageIDs []string
+				for _, message := range messages {
+					messageIDs = append(messageIDs, message.ID)
+				}
+
+				err = s.ChannelMessagesBulkDelete(m.ChannelID, messageIDs)
+				if err != nil {
+					s.ChannelMessageSend(m.ChannelID, "Error deleting messages.")
+					return
+				}
+
+				s.ChannelMessageSend(m.ChannelID, "Chat cleared successfully in bot-testing.")
+			} else {
+				s.ChannelMessageSend(m.ChannelID, "The !clear command can only be used in the bot-testing channel under the money category.")
+			}
+		} else {
+			s.ChannelMessageSend(m.ChannelID, "The !clear command can only be used in the bot-testing channel under the money category.")
+		}
+	}
+
 }
 
 func main() {
